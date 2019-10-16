@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Todo List</title>
+    <link rel="stylesheet" href="assets/css/base.css">
+    <link rel="stylesheet" href="assets/css/index.css">
+    <link rel="stylesheet" href="/js/nprogress/nprogress.css">
+</head>
+
+<body>
+    <section class="todoapp">
+        <header class="header">
+            <h1>todos</h1>
+            <input type="text" class="new-todo" placeholder="What needs to be done?" autofocus id="task">
+        </header>
+        <!-- This section should be hidden by default and shown when there are todos -->
+        <section class="main">
+            <input class="toggle-all" type="checkbox">
+            <ul class="todo-list" id="todo-list">
+            </ul>
+        </section>
+        <!-- This footer should hidden by default and shown when there are todos -->
+        <footer class="footer">
+            <!-- This should be `0 items left` by default -->
+            <span class="todo-count"><strong id="count">0</strong> item left</span>
+            <!-- Remove this if you don't implement routing -->
+            <ul class="filters">
+                <li>
+                    <a class="selected" href="javascript:;">All</a>
+                </li>
+                <li>
+                    <a href="javascript:;">Active</a>
+                </li>
+                <li>
+                    <a href="javascript:;">Completed</a>
+                </li>
+            </ul>
+            <!-- Hidden if no completed items are left ↓ -->
+            <button class="clear-completed">Clear completed</button>
+        </footer>
+    </section>
+    <script src="/js/jquery.min.js"></script>
+    <script src="/js/template-web.js"></script>
+    <script src="/js/nprogress/nprogress.js"></script>
+    <script type="text/html" id="taskTpl">
+    {{each tasks}}
+    	<li class="{{$value.completed ? 'completed' : ''}}">
+    		<div class="view">
+    		<input class="toggle" type="checkbox" {{$value.completed ? 'checked' : ''}}>
+    		<label>{{$value.title}}</label>
+    		<button class="destroy" data-id="{{$value._id}}"></button>
+    		</div>
+    	<input class="edit">
+    	</li>
+    {{/each}}
+    </script>
+    <script>
+    var taskAry = [];
+    let taskBox = $('#todo-list')
+    let taskInp = $('#task')
+    var strong = $('#count');
+    $(document).on('ajaxStart',function(){
+        NProgress.start() 
+    })
+    $(document).on('ajaxComplete',function(){
+        NProgress.done() 
+    })
+    $.ajax({
+        url:'/todo/task',
+        type:'get',
+        success:function(response){
+            console.log(response)
+            taskAry = response;
+            render();
+            calcCount();
+        }
+    })
+    taskInp.on('keyup',function(event){
+        if(event.keyCode == 13){
+            let taskName = $(this).val()
+            if(taskName.trim().length ==0){
+                return
+            }
+            $.ajax({
+                type:'POST',
+                url:'/todo/addTask',
+                data:JSON.stringify({title:taskName}),
+                contentType:'application/json',
+                success:function(result){
+                    taskAry.push(result);
+                    render();
+                    taskInp.val('');
+                    calcCount();
+                }
+            })
+        }
+    })
+    function render(){
+        var html = template('taskTpl', {
+            tasks: taskAry
+        });
+        taskBox.html(html);
+    }
+    taskBox.on('click','.destroy',function(){
+        let id = $(this).attr('data-id')
+        $.ajax({
+            type:'GET',
+            url:'/todo/deleteTask',
+            data:{_id:id},
+            success:function(response){
+                let index = taskAry.findIndex((item)=>{
+                    return item._id == id
+                })
+                taskAry.splice(index,1)
+                console.log(response);
+                render();
+                calcCount();
+            }
+        })
+    })
+    
+    
+    
+    
+    taskBox.on('click','.toggle',function(){
+        const status = $(this).is(':checked');
+        const  btn = $(this).siblings('.destroy');
+        let id = btn.attr('data-id')
+        $.ajax({
+            type:'POST',
+            url:'/todo/modifyTask',
+            data:JSON.stringify({_id:id,completed:status}),
+            contentType:'application/json',
+            success:function(response){
+                var task = taskAry.find(item=>item._id == id)
+                task.completed = response.completed;
+                render();
+                calcCount();
+            }
+        })
+    })
+    taskBox.on('dblclick','label',function(){
+        var view = $(this).parent();
+        var li = view.parent();
+        var edit = view.siblings('input.edit');
+        li.addClass('editing');
+        edit.val($(this).text())
+        edit.focus();
+    })
+    taskBox.on('blur','.edit',function(){
+        var title = $(this).val();
+        var id = $(this).siblings().find('button').attr('data-id');
+        var task = taskAry.find(item=>item._id==id)
+        $.ajax({
+            type:'post',
+            url:'/todo/modifyTask',
+            data:JSON.stringify({_id:id,title:title,completed:task.completed}),
+            contentType:'application/json',
+            success:function(response){
+                console.log(response)
+                task.title = title
+                render();
+                calcCount();
+            }
+        })
+    })
+    // 封装一个用于计算的函数
+    function calcCount(){
+        var count = 0;
+        var newAry = taskAry.filter(item=>item.completed==false);
+        console.log(newAry)
+        count = newAry.length
+        console.log(count)
+        strong.text(count)
+
+    }
+    </script>
+</body>
+
+</html>
